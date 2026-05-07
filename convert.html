@@ -2,31 +2,34 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>CSV to Text 変換（強化版）</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV変換 (iPad/iPhone対応版)</title>
     <style>
-        body { font-family: "Helvetica Neue", Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background-color: #f0f2f5; }
-        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 600px; margin: 20px auto; padding: 15px; background-color: #f0f2f5; color: #333; }
+        .card { background: white; padding: 25px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        h2 { margin-top: 0; font-size: 1.2rem; text-align: center; }
         
+        /* タップしやすい大きめのエリア */
         .upload-area {
-            border: 3px dashed #cbd5e0;
-            padding: 50px 20px;
+            border: 3px dashed #A0AEC0;
+            padding: 60px 20px;
             text-align: center;
             margin-bottom: 20px;
             cursor: pointer;
-            border-radius: 10px;
-            background: #fff;
-            transition: all 0.2s;
+            border-radius: 12px;
+            background: #F7FAFC;
+            transition: 0.2s;
+            -webkit-tap-highlight-color: transparent;
         }
-        /* ドラッグ中の色をより目立たせる */
-        .upload-area.dragover {
-            border-color: #4a90e2;
-            background-color: #ebf4ff;
-        }
+        .upload-area:active { background-color: #EDF2F7; transform: scale(0.98); }
+        .upload-area.dragover { border-color: #4299E1; background-color: #EBF8FF; }
 
-        #preview { width: 100%; height: 120px; margin-top: 15px; font-family: monospace; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; background: #f8f9fa; }
-        button { background: #1a73e8; color: white; border: none; padding: 14px 20px; border-radius: 6px; cursor: pointer; width: 100%; font-size: 16px; font-weight: bold; }
-        button:hover { background: #1557b0; }
-        .status { font-size: 0.9em; color: #444; margin-bottom: 10px; padding: 5px; background: #e9ecef; border-radius: 4px; display: none; }
+        #preview { width: 100%; height: 150px; margin-top: 15px; font-family: ui-monospace, SFMono-Regular, monospace; padding: 12px; border: 1px solid #E2E8F0; border-radius: 8px; box-sizing: border-box; background: #F8FAFC; font-size: 14px; }
+        
+        button { background: #007AFF; color: white; border: none; padding: 16px 20px; border-radius: 12px; cursor: pointer; width: 100%; font-size: 17px; font-weight: 600; margin-top: 15px; }
+        button:active { background: #0056b3; }
+        
+        .status { font-size: 0.85em; color: #4A5568; margin-bottom: 10px; text-align: center; min-height: 1.2em; }
     </style>
 </head>
 <body>
@@ -36,17 +39,17 @@
     
     <div id="status" class="status"></div>
 
-    <!-- ここにドロップ -->
+    <!-- iPadでも反応するように input の accept をあえて外すか汎用的に設定 -->
     <div id="dropZone" class="upload-area">
         <input type="file" id="fileInput" style="display:none">
-        <strong>ここにファイルをドロップ</strong><br>
-        <span style="font-size: 0.8em; color: #777;">またはここをクリックして選択</span>
+        <strong>ここをタップして選択</strong><br>
+        <span style="font-size: 0.8em; color: #718096;">（またはファイルをドロップ）</span>
     </div>
     
     <div id="resultArea" style="display:none">
-        <p style="font-size: 0.9em; margin-bottom: 5px;">変換後（カンマ区切り1行）:</p>
+        <div style="font-size: 0.85em; font-weight: bold;">変換後のデータ:</div>
         <textarea id="preview" readonly></textarea>
-        <button id="downloadBtn" style="margin-top:15px">.txtファイルをダウンロード</button>
+        <button id="downloadBtn">.txtファイルを保存する</button>
     </div>
 </div>
 
@@ -60,22 +63,14 @@
 
     let convertedContent = "";
 
-    // --- ブラウザのデフォルト挙動を完全に停止 ---
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        window.addEventListener(eventName, (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-        }, false);
-    });
+    // イベント停止用
+    const preventDefaults = (e) => { e.preventDefault(); e.stopPropagation(); };
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(n => window.addEventListener(n, preventDefaults));
 
-    // --- 視覚効果 ---
     dropZone.addEventListener('dragover', () => dropZone.classList.add('dragover'));
     dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-
-    // --- クリックで選択 ---
     dropZone.addEventListener('click', () => fileInput.click());
 
-    // --- ファイルが投入された時の処理 ---
     fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
     dropZone.addEventListener('drop', (e) => {
         dropZone.classList.remove('dragover');
@@ -85,47 +80,36 @@
     function handleFiles(files) {
         if (files.length === 0) return;
         const file = files[0];
-
-        status.style.display = 'block';
         status.textContent = "読み込み中: " + file.name;
 
         const reader = new FileReader();
         
+        // iPadやWindowsでの文字化け対策（UTF-8で読み込み）
         reader.onload = function(e) {
-            try {
-                const text = e.target.result;
-                processData(text);
-                status.textContent = "✅ 読み込み完了: " + file.name;
-            } catch (err) {
-                alert("エラー: ファイルの解析に失敗しました。");
-            }
+            const text = e.target.result;
+            // カンマ、改行、タブなどで分割し、空要素を除去して再結合
+            const items = text.split(/[\r\n\t,]+/)
+                              .map(item => item.trim())
+                              .filter(item => item !== "");
+
+            convertedContent = items.join(',');
+            preview.value = convertedContent;
+            resultArea.style.display = 'block';
+            status.textContent = "✅ 変換完了";
         };
 
-        reader.onerror = () => alert("ファイルの読み込み中にエラーが発生しました。");
-        
-        // テキストとして読み込む
-        reader.readAsText(file);
+        reader.readAsText(file, "UTF-8"); 
     }
 
-    function processData(text) {
-        // 全ての改行をカンマに置き換え、余計な空白を整理
-        const items = text.split(/[\r\n,]+/)
-                          .map(item => item.trim())
-                          .filter(item => item !== "");
-
-        convertedContent = items.join(',');
-        preview.value = convertedContent;
-        resultArea.style.display = 'block';
-    }
-
-    // --- ダウンロード ---
     downloadBtn.addEventListener('click', () => {
         const blob = new Blob([convertedContent], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = "converted_result.txt";
+        a.download = "output.txt";
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
         URL.revokeObjectURL(url);
     });
 </script>
