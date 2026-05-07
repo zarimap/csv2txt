@@ -2,39 +2,145 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>CSV to Text 変換ツール</title>
+    <title>CSV to Text 変換（ドラッグ&ドロップ対応）</title>
     <style>
-        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; line-height: 1.6; background-color: #f9f9f9; }
-        .card { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .upload-box { border: 2px dashed #ccc; padding: 20px; text-align: center; margin-bottom: 20px; cursor: pointer; }
-        .upload-box:hover { border-color: #007bff; }
-        #preview { width: 100%; height: 100px; margin-top: 15px; font-family: monospace; }
-        button { background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; width: 100%; font-size: 16px; }
-        button:disabled { background: #ccc; }
-        .status { font-size: 0.9em; color: #666; margin-bottom: 10px; }
+        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; line-height: 1.6; background-color: #f4f7f6; }
+        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        
+        /* アップロードエリアのスタイル */
+        .upload-area {
+            border: 2px dashed #bbb;
+            padding: 40px 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+            border-radius: 8px;
+            background: #fafafa;
+            transition: all 0.3s ease;
+        }
+        /* ドラッグオーバー時のスタイル */
+        .upload-area.dragover {
+            border-color: #007bff;
+            background-color: #e7f1ff;
+            transform: scale(1.02);
+        }
+
+        #preview { width: 100%; height: 120px; margin-top: 15px; font-family: monospace; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button { background: #28a745; color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; width: 100%; font-size: 16px; font-weight: bold; }
+        button:hover { background: #218838; }
+        .status { font-size: 0.9em; color: #555; margin-bottom: 8px; }
     </style>
 </head>
 <body>
 
 <div class="card">
     <h2>CSV 変換・出力</h2>
-    <p>CSVファイルを選択してください。全データをカンマ区切りの1行にまとめて出力します。</p>
+    <p style="font-size: 0.9em; color: #666;">CSVファイルをドロップするか、枠内をクリックして選択してください。</p>
 
-    <div class="upload-box" onclick="document.getElementById('fileInput').click()">
+    <!-- ドラッグ＆ドロップ対象エリア -->
+    <div id="dropZone" class="upload-area">
         <input type="file" id="fileInput" accept=".csv" style="display:none">
-        クリックしてCSVを選択
+        <strong>ファイルをここにドロップ</strong><br>
+        <span style="font-size: 0.8em; color: #888;">またはクリックしてファイルを選択</span>
     </div>
     
     <div id="fileInfo" class="status">ファイルが選択されていません</div>
 
     <div id="resultArea" style="display:none">
-        <div class="status">変換後のプレビュー:</div>
+        <div class="status">変換後のデータ（1行に統合）:</div>
         <textarea id="preview" readonly></textarea>
-        <button id="downloadBtn" style="margin-top:15px">.txtファイルとして保存</button>
+        <button id="downloadBtn" style="margin-top:15px">.txtファイルとしてダウンロード</button>
     </div>
 </div>
 
 <script>
+    const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
     const fileInfo = document.getElementById('fileInfo');
     const resultArea = document.getElementById('resultArea');
+    const preview = document.getElementById('preview');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    let convertedContent = "";
+
+    // クリックでファイル選択を開く
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    // ドラッグオーバー時のエフェクト
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+
+    // ドラッグが離れた時
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('dragover');
+    });
+
+    // ドロップされた時
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            handleFile(files[0]);
+        }
+    });
+
+    // ファイル選択（通常）
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            handleFile(e.target.files[0]);
+        }
+    });
+
+    // 共通のファイル処理
+    function handleFile(file) {
+        if (!file.name.toLowerCase().endsWith('.csv')) {
+            alert('CSVファイルを選択してください。');
+            return;
+        }
+
+        fileInfo.textContent = "読み込み中: " + file.name;
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            processCsv(event.target.result);
+        };
+        reader.readAsText(file);
+    }
+
+    function processCsv(text) {
+        // 改行や空行を処理してカンマ区切りの1行に
+        const lines = text.split(/\r?\n/);
+        let items = [];
+
+        lines.forEach(line => {
+            if (line.trim()) {
+                const cells = line.split(',');
+                cells.forEach(cell => {
+                    const cleanCell = cell.trim();
+                    if (cleanCell !== "") items.push(cleanCell);
+                });
+            }
+        });
+
+        convertedContent = items.join(',');
+        preview.value = convertedContent;
+        resultArea.style.display = 'block';
+        fileInfo.textContent = "変換完了！";
+    }
+
+    // ダウンロード処理
+    downloadBtn.addEventListener('click', () => {
+        const blob = new Blob([convertedContent], { type: 'text/plain' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'converted_data.txt';
+        link.click();
+        URL.revokeObjectURL(link.href);
+    });
+</script>
+
+</body>
+</html>
