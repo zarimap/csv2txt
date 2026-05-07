@@ -2,143 +2,131 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>CSV to Text 変換（ドラッグ&ドロップ対応）</title>
+    <title>CSV to Text 変換（強化版）</title>
     <style>
-        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; line-height: 1.6; background-color: #f4f7f6; }
-        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        body { font-family: "Helvetica Neue", Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; background-color: #f0f2f5; }
+        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
         
-        /* アップロードエリアのスタイル */
         .upload-area {
-            border: 2px dashed #bbb;
-            padding: 40px 20px;
+            border: 3px dashed #cbd5e0;
+            padding: 50px 20px;
             text-align: center;
             margin-bottom: 20px;
             cursor: pointer;
-            border-radius: 8px;
-            background: #fafafa;
-            transition: all 0.3s ease;
+            border-radius: 10px;
+            background: #fff;
+            transition: all 0.2s;
         }
-        /* ドラッグオーバー時のスタイル */
+        /* ドラッグ中の色をより目立たせる */
         .upload-area.dragover {
-            border-color: #007bff;
-            background-color: #e7f1ff;
-            transform: scale(1.02);
+            border-color: #4a90e2;
+            background-color: #ebf4ff;
         }
 
-        #preview { width: 100%; height: 120px; margin-top: 15px; font-family: monospace; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        button { background: #28a745; color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; width: 100%; font-size: 16px; font-weight: bold; }
-        button:hover { background: #218838; }
-        .status { font-size: 0.9em; color: #555; margin-bottom: 8px; }
+        #preview { width: 100%; height: 120px; margin-top: 15px; font-family: monospace; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; background: #f8f9fa; }
+        button { background: #1a73e8; color: white; border: none; padding: 14px 20px; border-radius: 6px; cursor: pointer; width: 100%; font-size: 16px; font-weight: bold; }
+        button:hover { background: #1557b0; }
+        .status { font-size: 0.9em; color: #444; margin-bottom: 10px; padding: 5px; background: #e9ecef; border-radius: 4px; display: none; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>CSV 変換・出力</h2>
-    <p style="font-size: 0.9em; color: #666;">CSVファイルをドロップするか、枠内をクリックして選択してください。</p>
+    <h2>CSV 変換・保存</h2>
+    
+    <div id="status" class="status"></div>
 
-    <!-- ドラッグ＆ドロップ対象エリア -->
+    <!-- ここにドロップ -->
     <div id="dropZone" class="upload-area">
-        <input type="file" id="fileInput" accept=".csv" style="display:none">
-        <strong>ファイルをここにドロップ</strong><br>
-        <span style="font-size: 0.8em; color: #888;">またはクリックしてファイルを選択</span>
+        <input type="file" id="fileInput" style="display:none">
+        <strong>ここにファイルをドロップ</strong><br>
+        <span style="font-size: 0.8em; color: #777;">またはここをクリックして選択</span>
     </div>
     
-    <div id="fileInfo" class="status">ファイルが選択されていません</div>
-
     <div id="resultArea" style="display:none">
-        <div class="status">変換後のデータ（1行に統合）:</div>
+        <p style="font-size: 0.9em; margin-bottom: 5px;">変換後（カンマ区切り1行）:</p>
         <textarea id="preview" readonly></textarea>
-        <button id="downloadBtn" style="margin-top:15px">.txtファイルとしてダウンロード</button>
+        <button id="downloadBtn" style="margin-top:15px">.txtファイルをダウンロード</button>
     </div>
 </div>
 
 <script>
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
-    const fileInfo = document.getElementById('fileInfo');
+    const status = document.getElementById('status');
     const resultArea = document.getElementById('resultArea');
     const preview = document.getElementById('preview');
     const downloadBtn = document.getElementById('downloadBtn');
 
     let convertedContent = "";
 
-    // クリックでファイル選択を開く
+    // --- ブラウザのデフォルト挙動を完全に停止 ---
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        window.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, false);
+    });
+
+    // --- 視覚効果 ---
+    dropZone.addEventListener('dragover', () => dropZone.classList.add('dragover'));
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+
+    // --- クリックで選択 ---
     dropZone.addEventListener('click', () => fileInput.click());
 
-    // ドラッグオーバー時のエフェクト
-    dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.classList.add('dragover');
-    });
-
-    // ドラッグが離れた時
-    dropZone.addEventListener('dragleave', () => {
-        dropZone.classList.remove('dragover');
-    });
-
-    // ドロップされた時
+    // --- ファイルが投入された時の処理 ---
+    fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
     dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
         dropZone.classList.remove('dragover');
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            handleFile(files[0]);
-        }
+        handleFiles(e.dataTransfer.files);
     });
 
-    // ファイル選択（通常）
-    fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            handleFile(e.target.files[0]);
-        }
-    });
+    function handleFiles(files) {
+        if (files.length === 0) return;
+        const file = files[0];
 
-    // 共通のファイル処理
-    function handleFile(file) {
-        if (!file.name.toLowerCase().endsWith('.csv')) {
-            alert('CSVファイルを選択してください。');
-            return;
-        }
-
-        fileInfo.textContent = "読み込み中: " + file.name;
+        status.style.display = 'block';
+        status.textContent = "読み込み中: " + file.name;
 
         const reader = new FileReader();
-        reader.onload = function(event) {
-            processCsv(event.target.result);
+        
+        reader.onload = function(e) {
+            try {
+                const text = e.target.result;
+                processData(text);
+                status.textContent = "✅ 読み込み完了: " + file.name;
+            } catch (err) {
+                alert("エラー: ファイルの解析に失敗しました。");
+            }
         };
+
+        reader.onerror = () => alert("ファイルの読み込み中にエラーが発生しました。");
+        
+        // テキストとして読み込む
         reader.readAsText(file);
     }
 
-    function processCsv(text) {
-        // 改行や空行を処理してカンマ区切りの1行に
-        const lines = text.split(/\r?\n/);
-        let items = [];
-
-        lines.forEach(line => {
-            if (line.trim()) {
-                const cells = line.split(',');
-                cells.forEach(cell => {
-                    const cleanCell = cell.trim();
-                    if (cleanCell !== "") items.push(cleanCell);
-                });
-            }
-        });
+    function processData(text) {
+        // 全ての改行をカンマに置き換え、余計な空白を整理
+        const items = text.split(/[\r\n,]+/)
+                          .map(item => item.trim())
+                          .filter(item => item !== "");
 
         convertedContent = items.join(',');
         preview.value = convertedContent;
         resultArea.style.display = 'block';
-        fileInfo.textContent = "変換完了！";
     }
 
-    // ダウンロード処理
+    // --- ダウンロード ---
     downloadBtn.addEventListener('click', () => {
         const blob = new Blob([convertedContent], { type: 'text/plain' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = 'converted_data.txt';
-        link.click();
-        URL.revokeObjectURL(link.href);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "converted_result.txt";
+        a.click();
+        URL.revokeObjectURL(url);
     });
 </script>
 
