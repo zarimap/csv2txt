@@ -3,106 +3,104 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSV変換 iPad対応版</title>
+    <title>CSV変換 (改行維持版)</title>
     <style>
-        body { font-family: -apple-system, sans-serif; background: #f4f4f9; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        .card { background: white; width: 100%; max-width: 450px; padding: 20px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        body { font-family: -apple-system, sans-serif; background: #f0f2f5; padding: 15px; display: flex; flex-direction: column; align-items: center; }
+        .card { background: white; width: 100%; max-width: 500px; padding: 20px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .section-title { font-size: 0.9rem; font-weight: bold; color: #555; margin: 15px 0 5px; }
         
-        /* 隠さず、透明にして「タップを確実に認識」させる */
+        /* ファイル選択エリア */
         .file-input-wrapper {
-            position: relative;
-            width: 100%;
-            height: 80px;
-            background: #007AFF;
-            color: white;
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 18px;
-            overflow: hidden;
-            margin-bottom: 20px;
+            position: relative; width: 100%; height: 60px; background: #007AFF; color: white;
+            border-radius: 10px; display: flex; align-items: center; justify-content: center;
+            font-weight: bold; overflow: hidden; margin-bottom: 10px;
         }
-        .file-input-wrapper input[type="file"] {
-            position: absolute;
-            left: 0; top: 0;
-            opacity: 0;
-            width: 100%;
-            height: 100%;
-            cursor: pointer;
-            /* iPadでのタップ反応を良くする */
-            display: block !important;
-        }
+        .file-input-wrapper input { position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; display: block !important; }
 
-        #preview { width: 100%; height: 150px; border: 1px solid #ddd; border-radius: 8px; padding: 10px; box-sizing: border-box; background: #fafafa; font-family: monospace; font-size: 14px; }
-        .save-btn { display: none; width: 100%; background: #34C759; color: white; border: none; padding: 15px; border-radius: 12px; font-size: 18px; font-weight: bold; margin-top: 15px; }
-        .info { font-size: 12px; color: #666; text-align: center; margin-bottom: 10px; }
+        /* テキストエリア */
+        textarea { width: 100%; border: 1px solid #ddd; border-radius: 8px; padding: 10px; box-sizing: border-box; font-family: monospace; font-size: 14px; white-space: pre; overflow-x: auto; }
+        #inputRaw { height: 100px; background: #fff; }
+        #preview { height: 150px; background: #f8f9fa; margin-top: 10px; }
+
+        .btn { width: 100%; border: none; padding: 15px; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .convert-btn { background: #5856d6; color: white; }
+        .save-btn { background: #34C759; color: white; display: none; }
+        .info { font-size: 11px; color: #888; text-align: center; margin-top: 15px; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h3 style="text-align:center;">CSV 変換</h3>
-    <p class="info">iPadの場合は下の青いボタンをタップして<br>「ブラウズ」からCSVを選んでください</p>
+    <h3 style="text-align:center; margin-top:0;">CSV 改行維持変換</h3>
 
-    <!-- iPadが認識しやすい「透明重ね」方式 -->
+    <div class="section-title">方法1：ドライブ等からファイル選択</div>
     <div class="file-input-wrapper">
-        CSVファイルを選択
-        <input type="file" id="realInput">
+        ファイルを選択
+        <input type="file" id="fileInput">
     </div>
 
-    <textarea id="preview" placeholder="ここに結果が表示されます" readonly></textarea>
-    <button id="saveBtn" class="save-btn">.txtで保存</button>
+    <div class="section-title">方法2：データを直接ペースト</div>
+    <textarea id="inputRaw" placeholder="ここにCSVを貼り付けても変換できます"></textarea>
+    <button id="convertBtn" class="btn convert-btn">貼り付けデータを変換</button>
+
+    <div class="section-title">出力プレビュー（改行あり）</div>
+    <textarea id="preview" readonly></textarea>
+    <button id="saveBtn" class="btn save-btn">.txtファイルで保存</button>
+
+    <p class="info">※各行内の余分な空白を除去し、改行を維持して出力します。</p>
 </div>
 
 <script>
-    const input = document.getElementById('realInput');
+    const fileInput = document.getElementById('fileInput');
+    const inputRaw = document.getElementById('inputRaw');
+    const convertBtn = document.getElementById('convertBtn');
     const preview = document.getElementById('preview');
     const saveBtn = document.getElementById('saveBtn');
     let resultText = "";
 
-    // ファイル選択時のイベント
-    input.addEventListener('change', function(e) {
+    // 変換ロジック（改行を維持）
+    function processData(content) {
+        // 1. まず行ごとに分割
+        const lines = content.split(/\r?\n/);
+        
+        const processedLines = lines.map(line => {
+            // 2. 各行の中でカンマ区切りにして、前後の空白を掃除
+            return line.split(',')
+                       .map(item => item.trim())
+                       .filter(item => item !== "") // 空のセルを除去（必要ならここを消す）
+                       .join(',');
+        }).filter(line => line !== ""); // 空行を除去
+
+        // 3. 改行コード \n で再度つなぎ合わせる
+        resultText = processedLines.join('\n');
+        preview.value = resultText;
+        saveBtn.style.display = 'block';
+    }
+
+    // ファイル読み込み
+    fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
-
         const reader = new FileReader();
-        
-        reader.onload = function(event) {
-            const content = event.target.result;
-            // カンマ、改行、タブで区切って1行のカンマ区切りにする
-            const processed = content
-                .split(/[\r\n\t,]+/)
-                .map(s => s.trim())
-                .filter(s => s !== "")
-                .join(',');
-
-            resultText = processed;
-            preview.value = processed;
-            saveBtn.style.display = 'block';
-        };
-
-        // iPad/iOSのファイル読み取りエラー対策
-        try {
-            reader.readAsText(file, "UTF-8");
-        } catch (err) {
-            alert("読み込みに失敗しました。ファイルアプリから直接選んでください。");
-        }
+        reader.onload = (ev) => processData(ev.target.result);
+        reader.readAsText(file);
     });
 
-    // 保存処理
-    saveBtn.addEventListener('click', function() {
+    // 貼り付け変換
+    convertBtn.addEventListener('click', () => {
+        if (!inputRaw.value.trim()) return;
+        processData(inputRaw.value);
+    });
+
+    // 保存
+    saveBtn.addEventListener('click', () => {
         const blob = new Blob([resultText], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = "data_converted.txt";
-        // iOS Safariでのダウンロードを確実にするため
+        a.href = URL.createObjectURL(blob);
+        a.download = "converted_list.txt";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
     });
 </script>
 
