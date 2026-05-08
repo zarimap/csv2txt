@@ -2,115 +2,128 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSV変換 (iPad/iPhone対応版)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CSV変換 (iPad最強対応)</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 600px; margin: 20px auto; padding: 15px; background-color: #f0f2f5; color: #333; }
-        .card { background: white; padding: 25px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
-        h2 { margin-top: 0; font-size: 1.2rem; text-align: center; }
+        body { font-family: -apple-system, sans-serif; background: #f0f2f5; padding: 20px; display: flex; justify-content: center; }
+        .card { background: white; width: 100%; max-width: 500px; padding: 25px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        h2 { font-size: 1.2rem; margin-bottom: 20px; text-align: center; color: #1c1e21; }
         
-        /* タップしやすい大きめのエリア */
-        .upload-area {
-            border: 3px dashed #A0AEC0;
-            padding: 60px 20px;
+        /* iPadで押しやすい巨大なボタンをメインに */
+        .select-btn {
+            display: block;
+            background: #007AFF;
+            color: white;
             text-align: center;
+            padding: 40px 20px;
+            border-radius: 15px;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 1.1rem;
+            border: 3px solid #0051a8;
             margin-bottom: 20px;
             cursor: pointer;
-            border-radius: 12px;
-            background: #F7FAFC;
-            transition: 0.2s;
-            -webkit-tap-highlight-color: transparent;
         }
-        .upload-area:active { background-color: #EDF2F7; transform: scale(0.98); }
-        .upload-area.dragover { border-color: #4299E1; background-color: #EBF8FF; }
+        
+        /* ドロップゾーン（iPadのD&Dが不安定な時用の補助） */
+        .drop-zone {
+            border: 2px dashed #ccc;
+            padding: 20px;
+            text-align: center;
+            border-radius: 15px;
+            color: #888;
+            font-size: 0.9rem;
+            background: #fafafa;
+        }
+        .drop-zone.dragover { background: #e1f0ff; border-color: #007AFF; }
 
-        #preview { width: 100%; height: 150px; margin-top: 15px; font-family: ui-monospace, SFMono-Regular, monospace; padding: 12px; border: 1px solid #E2E8F0; border-radius: 8px; box-sizing: border-box; background: #F8FAFC; font-size: 14px; }
-        
-        button { background: #007AFF; color: white; border: none; padding: 16px 20px; border-radius: 12px; cursor: pointer; width: 100%; font-size: 17px; font-weight: 600; margin-top: 15px; }
-        button:active { background: #0056b3; }
-        
-        .status { font-size: 0.85em; color: #4A5568; margin-bottom: 10px; text-align: center; min-height: 1.2em; }
+        textarea { width: 100%; height: 150px; margin-top: 20px; border-radius: 10px; border: 1px solid #ddd; padding: 10px; font-family: monospace; box-sizing: border-box; }
+        .dl-btn { background: #34c759; color: white; border: none; width: 100%; padding: 15px; border-radius: 12px; font-size: 1rem; font-weight: bold; margin-top: 15px; display: none; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>CSV 変換・保存</h2>
+    <h2>CSV 読み込み</h2>
     
-    <div id="status" class="status"></div>
-
-    <!-- iPadでも反応するように input の accept をあえて外すか汎用的に設定 -->
-    <div id="dropZone" class="upload-area">
+    <!-- 1. iPadで最も確実な「ファイル選択ボタン」 -->
+    <label for="fileInput" class="select-btn">
+        タップしてCSVを選択
         <input type="file" id="fileInput" style="display:none">
-        <strong>ここをタップして選択</strong><br>
-        <span style="font-size: 0.8em; color: #718096;">（またはファイルをドロップ）</span>
+    </label>
+
+    <!-- 2. ドロップゾーン（一応残すが、iPadなら上記ボタンが確実） -->
+    <div id="dropZone" class="drop-zone">
+        ここにファイルをドロップ
     </div>
-    
-    <div id="resultArea" style="display:none">
-        <div style="font-size: 0.85em; font-weight: bold;">変換後のデータ:</div>
-        <textarea id="preview" readonly></textarea>
-        <button id="downloadBtn">.txtファイルを保存する</button>
+
+    <div id="resultArea">
+        <textarea id="preview" placeholder="ここに結果が表示されます" readonly></textarea>
+        <button id="downloadBtn" class="dl-btn">.txtとして保存</button>
     </div>
 </div>
 
 <script>
-    const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
-    const status = document.getElementById('status');
-    const resultArea = document.getElementById('resultArea');
+    const dropZone = document.getElementById('dropZone');
     const preview = document.getElementById('preview');
     const downloadBtn = document.getElementById('downloadBtn');
 
-    let convertedContent = "";
+    let outputText = "";
 
-    // イベント停止用
-    const preventDefaults = (e) => { e.preventDefault(); e.stopPropagation(); };
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(n => window.addEventListener(n, preventDefaults));
+    // --- iPadのD&D動作を強制的に受け付ける設定 ---
+    const stopEvents = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(name => {
+        document.addEventListener(name, stopEvents, false);
+        dropZone.addEventListener(name, stopEvents, false);
+    });
 
     dropZone.addEventListener('dragover', () => dropZone.classList.add('dragover'));
     dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-    dropZone.addEventListener('click', () => fileInput.click());
 
-    fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
-    dropZone.addEventListener('drop', (e) => {
-        dropZone.classList.remove('dragover');
-        handleFiles(e.dataTransfer.files);
-    });
-
-    function handleFiles(files) {
-        if (files.length === 0) return;
-        const file = files[0];
-        status.textContent = "読み込み中: " + file.name;
+    // --- ファイル処理の本体 ---
+    const handleFile = (file) => {
+        if (!file) return;
 
         const reader = new FileReader();
-        
-        // iPadやWindowsでの文字化け対策（UTF-8で読み込み）
-        reader.onload = function(e) {
-            const text = e.target.result;
-            // カンマ、改行、タブなどで分割し、空要素を除去して再結合
-            const items = text.split(/[\r\n\t,]+/)
-                              .map(item => item.trim())
-                              .filter(item => item !== "");
+        reader.onload = (e) => {
+            const content = e.target.result;
+            // iPad/Excel特有の改行コードやカンマを全て1列のカンマ区切りに変換
+            const cleanData = content
+                .split(/[\r\n,]+/) 
+                .map(s => s.trim())
+                .filter(s => s !== "")
+                .join(',');
 
-            convertedContent = items.join(',');
-            preview.value = convertedContent;
-            resultArea.style.display = 'block';
-            status.textContent = "✅ 変換完了";
+            outputText = cleanData;
+            preview.value = cleanData;
+            downloadBtn.style.display = 'block';
         };
+        // エンコードを汎用的なものに設定
+        reader.readAsText(file);
+    };
 
-        reader.readAsText(file, "UTF-8"); 
-    }
+    // ボタン経由
+    fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
 
+    // ドロップ経由
+    dropZone.addEventListener('drop', (e) => {
+        dropZone.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        handleFile(file);
+    });
+
+    // --- 保存処理 ---
     downloadBtn.addEventListener('click', () => {
-        const blob = new Blob([convertedContent], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
+        const blob = new Blob([outputText], { type: 'text/plain' });
         const a = document.createElement('a');
-        a.href = url;
+        a.href = URL.createObjectURL(blob);
         a.download = "output.txt";
-        document.body.appendChild(a);
         a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
     });
 </script>
 
