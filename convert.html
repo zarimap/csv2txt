@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSV変換 (改行維持版)</title>
+    <title>CSV変換 (空データ維持版)</title>
     <style>
         body { font-family: -apple-system, sans-serif; background: #f0f2f5; padding: 15px; display: flex; flex-direction: column; align-items: center; }
         .card { background: white; width: 100%; max-width: 500px; padding: 20px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         .section-title { font-size: 0.9rem; font-weight: bold; color: #555; margin: 15px 0 5px; }
         
-        /* ファイル選択エリア */
         .file-input-wrapper {
             position: relative; width: 100%; height: 60px; background: #007AFF; color: white;
             border-radius: 10px; display: flex; align-items: center; justify-content: center;
@@ -17,7 +16,6 @@
         }
         .file-input-wrapper input { position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; display: block !important; }
 
-        /* テキストエリア */
         textarea { width: 100%; border: 1px solid #ddd; border-radius: 8px; padding: 10px; box-sizing: border-box; font-family: monospace; font-size: 14px; white-space: pre; overflow-x: auto; }
         #inputRaw { height: 100px; background: #fff; }
         #preview { height: 150px; background: #f8f9fa; margin-top: 10px; }
@@ -31,7 +29,7 @@
 <body>
 
 <div class="card">
-    <h3 style="text-align:center; margin-top:0;">CSV 改行維持変換</h3>
+    <h3 style="text-align:center; margin-top:0;">CSV 変換</h3>
 
     <div class="section-title">方法1：ドライブ等からファイル選択</div>
     <div class="file-input-wrapper">
@@ -43,11 +41,11 @@
     <textarea id="inputRaw" placeholder="ここにCSVを貼り付けても変換できます"></textarea>
     <button id="convertBtn" class="btn convert-btn">貼り付けデータを変換</button>
 
-    <div class="section-title">出力プレビュー（改行あり）</div>
+    <div class="section-title">出力プレビュー（空データ・改行維持）</div>
     <textarea id="preview" readonly></textarea>
     <button id="saveBtn" class="btn save-btn">.txtファイルで保存</button>
 
-    <p class="info">※各行内の余分な空白を除去し、改行を維持して出力します。</p>
+    <p class="info">※カンマが連続（,,）している場合も空データとして維持します。</p>
 </div>
 
 <script>
@@ -58,26 +56,27 @@
     const saveBtn = document.getElementById('saveBtn');
     let resultText = "";
 
-    // 変換ロジック（改行を維持）
     function processData(content) {
-        // 1. まず行ごとに分割
+        // 1. 行ごとに分割
         const lines = content.split(/\r?\n/);
         
         const processedLines = lines.map(line => {
-            // 2. 各行の中でカンマ区切りにして、前後の空白を掃除
+            // 行が完全に空（改行のみ）の場合はそのまま返す
+            if (!line.trim() && line === "") return "";
+
+            // 2. カンマで分割し、各要素のトリム（空白除去）のみ行う
+            // .filterを外すことで空の要素（,,の間のデータ）を維持
             return line.split(',')
                        .map(item => item.trim())
-                       .filter(item => item !== "") // 空のセルを除去（必要ならここを消す）
                        .join(',');
-        }).filter(line => line !== ""); // 空行を除去
+        });
 
-        // 3. 改行コード \n で再度つなぎ合わせる
+        // 3. 改行で結合
         resultText = processedLines.join('\n');
         preview.value = resultText;
         saveBtn.style.display = 'block';
     }
 
-    // ファイル読み込み
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -86,18 +85,16 @@
         reader.readAsText(file);
     });
 
-    // 貼り付け変換
     convertBtn.addEventListener('click', () => {
-        if (!inputRaw.value.trim()) return;
+        if (!inputRaw.value) return;
         processData(inputRaw.value);
     });
 
-    // 保存
     saveBtn.addEventListener('click', () => {
         const blob = new Blob([resultText], { type: 'text/plain' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = "converted_list.txt";
+        a.download = "converted.txt";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
