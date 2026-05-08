@@ -2,128 +2,107 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>CSV変換 (iPad最強対応)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV変換 iPad対応版</title>
     <style>
-        body { font-family: -apple-system, sans-serif; background: #f0f2f5; padding: 20px; display: flex; justify-content: center; }
-        .card { background: white; width: 100%; max-width: 500px; padding: 25px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
-        h2 { font-size: 1.2rem; margin-bottom: 20px; text-align: center; color: #1c1e21; }
+        body { font-family: -apple-system, sans-serif; background: #f4f4f9; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .card { background: white; width: 100%; max-width: 450px; padding: 20px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         
-        /* iPadで押しやすい巨大なボタンをメインに */
-        .select-btn {
-            display: block;
+        /* 隠さず、透明にして「タップを確実に認識」させる */
+        .file-input-wrapper {
+            position: relative;
+            width: 100%;
+            height: 80px;
             background: #007AFF;
             color: white;
-            text-align: center;
-            padding: 40px 20px;
-            border-radius: 15px;
-            text-decoration: none;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             font-weight: bold;
-            font-size: 1.1rem;
-            border: 3px solid #0051a8;
+            font-size: 18px;
+            overflow: hidden;
             margin-bottom: 20px;
+        }
+        .file-input-wrapper input[type="file"] {
+            position: absolute;
+            left: 0; top: 0;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
             cursor: pointer;
+            /* iPadでのタップ反応を良くする */
+            display: block !important;
         }
-        
-        /* ドロップゾーン（iPadのD&Dが不安定な時用の補助） */
-        .drop-zone {
-            border: 2px dashed #ccc;
-            padding: 20px;
-            text-align: center;
-            border-radius: 15px;
-            color: #888;
-            font-size: 0.9rem;
-            background: #fafafa;
-        }
-        .drop-zone.dragover { background: #e1f0ff; border-color: #007AFF; }
 
-        textarea { width: 100%; height: 150px; margin-top: 20px; border-radius: 10px; border: 1px solid #ddd; padding: 10px; font-family: monospace; box-sizing: border-box; }
-        .dl-btn { background: #34c759; color: white; border: none; width: 100%; padding: 15px; border-radius: 12px; font-size: 1rem; font-weight: bold; margin-top: 15px; display: none; }
+        #preview { width: 100%; height: 150px; border: 1px solid #ddd; border-radius: 8px; padding: 10px; box-sizing: border-box; background: #fafafa; font-family: monospace; font-size: 14px; }
+        .save-btn { display: none; width: 100%; background: #34C759; color: white; border: none; padding: 15px; border-radius: 12px; font-size: 18px; font-weight: bold; margin-top: 15px; }
+        .info { font-size: 12px; color: #666; text-align: center; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>CSV 読み込み</h2>
-    
-    <!-- 1. iPadで最も確実な「ファイル選択ボタン」 -->
-    <label for="fileInput" class="select-btn">
-        タップしてCSVを選択
-        <input type="file" id="fileInput" style="display:none">
-    </label>
+    <h3 style="text-align:center;">CSV 変換</h3>
+    <p class="info">iPadの場合は下の青いボタンをタップして<br>「ブラウズ」からCSVを選んでください</p>
 
-    <!-- 2. ドロップゾーン（一応残すが、iPadなら上記ボタンが確実） -->
-    <div id="dropZone" class="drop-zone">
-        ここにファイルをドロップ
+    <!-- iPadが認識しやすい「透明重ね」方式 -->
+    <div class="file-input-wrapper">
+        CSVファイルを選択
+        <input type="file" id="realInput">
     </div>
 
-    <div id="resultArea">
-        <textarea id="preview" placeholder="ここに結果が表示されます" readonly></textarea>
-        <button id="downloadBtn" class="dl-btn">.txtとして保存</button>
-    </div>
+    <textarea id="preview" placeholder="ここに結果が表示されます" readonly></textarea>
+    <button id="saveBtn" class="save-btn">.txtで保存</button>
 </div>
 
 <script>
-    const fileInput = document.getElementById('fileInput');
-    const dropZone = document.getElementById('dropZone');
+    const input = document.getElementById('realInput');
     const preview = document.getElementById('preview');
-    const downloadBtn = document.getElementById('downloadBtn');
+    const saveBtn = document.getElementById('saveBtn');
+    let resultText = "";
 
-    let outputText = "";
-
-    // --- iPadのD&D動作を強制的に受け付ける設定 ---
-    const stopEvents = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-    };
-
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(name => {
-        document.addEventListener(name, stopEvents, false);
-        dropZone.addEventListener(name, stopEvents, false);
-    });
-
-    dropZone.addEventListener('dragover', () => dropZone.classList.add('dragover'));
-    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-
-    // --- ファイル処理の本体 ---
-    const handleFile = (file) => {
+    // ファイル選択時のイベント
+    input.addEventListener('change', function(e) {
+        const file = e.target.files[0];
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = (e) => {
-            const content = e.target.result;
-            // iPad/Excel特有の改行コードやカンマを全て1列のカンマ区切りに変換
-            const cleanData = content
-                .split(/[\r\n,]+/) 
+        
+        reader.onload = function(event) {
+            const content = event.target.result;
+            // カンマ、改行、タブで区切って1行のカンマ区切りにする
+            const processed = content
+                .split(/[\r\n\t,]+/)
                 .map(s => s.trim())
                 .filter(s => s !== "")
                 .join(',');
 
-            outputText = cleanData;
-            preview.value = cleanData;
-            downloadBtn.style.display = 'block';
+            resultText = processed;
+            preview.value = processed;
+            saveBtn.style.display = 'block';
         };
-        // エンコードを汎用的なものに設定
-        reader.readAsText(file);
-    };
 
-    // ボタン経由
-    fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
-
-    // ドロップ経由
-    dropZone.addEventListener('drop', (e) => {
-        dropZone.classList.remove('dragover');
-        const file = e.dataTransfer.files[0];
-        handleFile(file);
+        // iPad/iOSのファイル読み取りエラー対策
+        try {
+            reader.readAsText(file, "UTF-8");
+        } catch (err) {
+            alert("読み込みに失敗しました。ファイルアプリから直接選んでください。");
+        }
     });
 
-    // --- 保存処理 ---
-    downloadBtn.addEventListener('click', () => {
-        const blob = new Blob([outputText], { type: 'text/plain' });
+    // 保存処理
+    saveBtn.addEventListener('click', function() {
+        const blob = new Blob([resultText], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = "output.txt";
+        a.href = url;
+        a.download = "data_converted.txt";
+        // iOS Safariでのダウンロードを確実にするため
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     });
 </script>
 
